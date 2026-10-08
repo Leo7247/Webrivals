@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Roblox Rivals Web Edition</title>
+  <link rel="stylesheet" href="style.css">
+  <!-- Three.js for 3D Graphics -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <!-- PeerJS for WebRTC Multiplayer -->
+  <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+</head>
+<body>
+  <!-- Game Canvas -->
+  <canvas id="game-canvas"></canvas>
+
+  <!-- Crosshair & Hitmarker -->
+  <div id="crosshair">
+    <div class="dot"></div>
+    <div class="line top"></div>
+    <div class="line bottom"></div>
+    <div class="line left"></div>
+    <div class="line right"></div>
+    <div id="hitmarker"></div>
+  </div>
+
+  <!-- HUD Overlay -->
+  <div id="hud" class="hidden">
+    <div id="top-bar">
+      <div id="score-board">
+        <span id="player-score">YOU: 0</span>
+        <span class="vs">VS</span>
+        <span id="enemy-score">ENEMY: 0</span>
+      </div>
+      <div id="match-timer">FIRST TO 5 KILLS WINS</div>
+    </div>
+
+    <div id="kill-feed"></div>
+
+    <div id="bottom-bar">
+      <div id="health-container">
+        <div id="health-label">HEALTH</div>
+        <div id="health-bar-bg">
+          <div id="health-bar-fill"></div>
+        </div>
+        <div id="health-text">100 / 100</div>
+      </div>
+
+      <div id="weapon-container">
+        <div id="weapon-name">ASSAULT RIFLE</div>
+        <div id="ammo-count">30 / ∞</div>
+        <div id="loadout-slots">
+          <div class="slot active" data-slot="1">1: Primary</div>
+          <div class="slot" data-slot="2">2: Secondary</div>
+          <div class="slot" data-slot="3">3: Melee</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main Menu Overlay -->
+  <div id="menu-overlay">
+    <div class="menu-card">
+      <h1 class="game-title">RIVALS <span>ONLINE</span></h1>
+      <p class="tagline">Fast-Paced Blocky Arena Shooter</p>
+
+      <div id="connection-panel">
+        <button id="btn-host" class="btn primary-btn">CREATE LOBBY</button>
+        
+        <div class="divider"><span>OR</span></div>
+
+        <div class="join-box">
+          <input type="text" id="join-code-input" placeholder="ROOM CODE..." maxlength="6">
+          <button id="btn-join" class="btn secondary-btn">JOIN GAME</button>
+        </div>
+      </div>
+
+      <div id="lobby-panel" class="hidden">
+        <h3>LOBBY ROOM CODE:</h3>
+        <div id="room-code-display" class="code-box">------</div>
+        <p class="status-msg" id="lobby-status">Waiting for opponent to join...</p>
+        <button id="btn-start" class="btn primary-btn hidden">START MATCH</button>
+      </div>
+
+      <div class="loadout-select">
+        <h3>PRIMARY WEAPON</h3>
+        <div class="weapon-picker">
+          <button class="wpn-btn active" data-wpn="rifle">Assault Rifle</button>
+          <button class="wpn-btn" data-wpn="shotgun">Shotgun</button>
+          <button class="wpn-btn" data-wpn="sniper">Sniper Rifle</button>
+        </div>
+      </div>
+
+      <div class="controls-guide">
+        <h4>CONTROLS</h4>
+        <p><strong>WASD</strong>: Move | <strong>SPACE</strong>: Jump | <strong>SHIFT</strong>: Sprint</p>
+        <p><strong>MOUSE</strong>: Aim / Shoot | <strong>1, 2, 3</strong>: Switch Weapon</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Game Over Screen -->
+  <div id="game-over-overlay" class="hidden">
+    <div class="menu-card text-center">
+      <h1 id="winner-title">VICTORY!</h1>
+      <p id="winner-sub">You dominated the arena.</p>
+      <button id="btn-rematch" class="btn primary-btn">PLAY AGAIN</button>
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <script src="network.js"></script>
+  <script src="game.js"></script>
+</body>
+</html>
