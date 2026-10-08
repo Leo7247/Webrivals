@@ -1,5 +1,5 @@
 /**
- * PeerJS Peer-to-Peer Network Manager
+ * PeerJS P2P WebRTC Multiplayer Controller
  */
 class NetworkManager {
   constructor() {
@@ -11,10 +11,9 @@ class NetworkManager {
     this.onDataCallback = null;
   }
 
-  // Initialize Host Room Code
-  initHost(onReady) {
+  initHost(customCode, onReady) {
     this.isHost = true;
-    this.roomCode = Math.random().toString(36).substring(2, 8).toUpperCase();
+    this.roomCode = customCode || Math.random().toString(36).substring(2, 8).toUpperCase();
     this.peer = new Peer('rivals-' + this.roomCode);
 
     this.peer.on('open', () => {
@@ -23,15 +22,12 @@ class NetworkManager {
 
     this.peer.on('connection', (connection) => {
       this.conn = connection;
-      this.setupConnectionHandlers();
+      this.setupHandlers();
     });
 
-    this.peer.on('error', (err) => {
-      alert('Network error: ' + err.type);
-    });
+    this.peer.on('error', (err) => alert('Network error: ' + err.type));
   }
 
-  // Join existing host
   joinLobby(code, onSuccess, onError) {
     this.isHost = false;
     this.roomCode = code.toUpperCase();
@@ -39,7 +35,7 @@ class NetworkManager {
 
     this.peer.on('open', () => {
       this.conn = this.peer.connect('rivals-' + this.roomCode);
-      this.setupConnectionHandlers();
+      this.setupHandlers();
       if (onSuccess) onSuccess();
     });
 
@@ -48,7 +44,7 @@ class NetworkManager {
     });
   }
 
-  setupConnectionHandlers() {
+  setupHandlers() {
     this.conn.on('open', () => {
       if (this.onConnectCallback) this.onConnectCallback();
     });
@@ -64,16 +60,9 @@ class NetworkManager {
   }
 
   send(data) {
-    if (this.conn && this.conn.open) {
-      this.conn.send(data);
-    }
+    if (this.conn && this.conn.open) this.conn.send(data);
   }
 
-  onConnect(cb) {
-    this.onConnectCallback = cb;
-  }
-
-  onData(cb) {
-    this.onDataCallback = cb;
-  }
+  onConnect(cb) { this.onConnectCallback = cb; }
+  onData(cb) { this.onDataCallback = cb; }
 }
