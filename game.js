@@ -1,5 +1,5 @@
 /**
- * Main Roblox Rivals Engine & Mode Controller
+ * Roblox Rivals Web Edition - Core Engine Loop
  */
 
 class SoundEffects {
@@ -14,13 +14,13 @@ class SoundEffects {
 
     if (type === 'sniper') {
       osc.type = 'sawtooth';
-      osc.frequency.setValueAtTime(320, this.ctx.currentTime);
+      osc.frequency.setValueAtTime(350, this.ctx.currentTime);
       osc.frequency.exponentialRampToValueAtTime(20, this.ctx.currentTime + 0.4);
       gain.gain.setValueAtTime(0.6, this.ctx.currentTime);
       gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.4);
     } else if (type === 'shotgun') {
       osc.type = 'square';
-      osc.frequency.setValueAtTime(150, this.ctx.currentTime);
+      osc.frequency.setValueAtTime(160, this.ctx.currentTime);
       osc.frequency.exponentialRampToValueAtTime(10, this.ctx.currentTime + 0.25);
       gain.gain.setValueAtTime(0.5, this.ctx.currentTime);
       gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.25);
@@ -38,26 +38,23 @@ class SoundEffects {
     osc.stop(this.ctx.currentTime + 0.4);
   }
 
-  playHit(isHeadshot = false) {
+  playHit(isHead = false) {
     if (this.ctx.state === 'suspended') this.ctx.resume();
     const osc = this.ctx.createOscillator();
     const gain = this.ctx.createGain();
     osc.type = 'sine';
-    osc.frequency.setValueAtTime(isHeadshot ? 1200 : 800, this.ctx.currentTime);
-    osc.frequency.setValueAtTime(isHeadshot ? 1600 : 1000, this.ctx.currentTime + 0.05);
+    osc.frequency.setValueAtTime(isHead ? 1400 : 800, this.ctx.currentTime);
     gain.gain.setValueAtTime(0.3, this.ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.1);
-    osc.connect(gain);
-    gain.connect(this.ctx.destination);
-    osc.start();
-    osc.stop(this.ctx.currentTime + 0.1);
+    gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.12);
+    osc.connect(gain); gain.connect(this.ctx.destination);
+    osc.start(); osc.stop(this.ctx.currentTime + 0.12);
   }
 }
 
 const WEAPONS = {
   rifle: { name: 'Assault Rifle', damage: 22, fireRate: 110, ammo: 30, color: 0x333333 },
-  shotgun: { name: 'Pump Shotgun', damage: 12, pellets: 8, fireRate: 850, ammo: 8, color: 0x552200 },
-  sniper: { name: 'Sniper Rifle', damage: 95, fireRate: 1200, ammo: 5, color: 0x111111 },
+  shotgun: { name: 'Pump Shotgun', damage: 12, fireRate: 850, ammo: 8, color: 0x552200 },
+  sniper: { name: 'Sniper Rifle', damage: 90, fireRate: 1200, ammo: 5, color: 0x111111 },
   pistol: { name: 'Handgun', damage: 25, fireRate: 220, ammo: 12, color: 0x666666 },
   knife: { name: 'Knife', damage: 60, fireRate: 400, ammo: Infinity, color: 0xaaaaaa }
 };
@@ -65,10 +62,11 @@ const WEAPONS = {
 class GameEngine {
   constructor() {
     this.sfx = new SoundEffects();
+    this.collider = new MapCollider();
     this.network = new NetworkManager();
     this.friends = new FriendsManager((code) => this.joinFriendMatch(code));
 
-    this.mode = 'MENU'; // MENU, ONLINE, NPC, RANGE
+    this.mode = 'MENU';
     this.isGameActive = false;
     this.selectedPrimary = 'rifle';
     this.activeWeaponKey = 'rifle';
@@ -82,9 +80,16 @@ class GameEngine {
     this.rangeHits = 0;
     this.rangeScore = 0;
 
-    this.position = new THREE.Vector3(0, 3, 20);
+    this.position = new THREE.Vector3(0, 3, 22);
     this.velocity = new THREE.Vector3();
     this.pitch = 0; this.yaw = 0;
+
+    this.mobile = new MobileController(
+      () => this.shoot(),
+      () => this.jump(),
+      () => this.dash(),
+      (slot) => this.switchSlot(slot)
+    );
 
     this.initThree();
     this.initMap();
@@ -121,33 +126,33 @@ class GameEngine {
   }
 
   initMap() {
-    const floor = new THREE.Mesh(
-      new THREE.BoxGeometry(90, 2, 90),
-      new THREE.MeshStandardMaterial({ color: 0x2c3e50 })
-    );
+    // Stud Floor
+    const floorGeo = new THREE.BoxGeometry(90, 2, 90);
+    const floorMat = new THREE.MeshStandardMaterial({ map: TextureGenerator.createStudFloorTexture() });
+    const floor = new THREE.Mesh(floorGeo, floorMat);
     floor.position.set(0, -1, 0);
     this.scene.add(floor);
 
-    const colors = [0xe74c3c, 0x3498db, 0xf1c40f, 0x2ecc71];
-    const addBox = (w, h, d, x, y, z, cIdx) => {
-      const box = new THREE.Mesh(
-        new THREE.BoxGeometry(w, h, d),
-        new THREE.MeshStandardMaterial({ color: colors[cIdx % colors.length] })
-      );
+    const wallMat = new THREE.MeshStandardMaterial({ map: TextureGenerator.createWallTexture() });
+    const crateMat = new THREE.MeshStandardMaterial({ map: TextureGenerator.createCrateTexture() });
+
+    const addBox = (w, h, d, x, y, z, mat) => {
+      const box = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
       box.position.set(x, y, z);
       this.scene.add(box);
+      this.collider.addBox(x, y, z, w, h, d);
     };
 
-    // Barriers
-    addBox(92, 12, 2, 0, 5, -45, 0);
-    addBox(92, 12, 2, 0, 5, 45, 0);
-    addBox(2, 12, 92, -45, 5, 0, 0);
-    addBox(2, 12, 92, 45, 5, 0, 0);
+    // Outer Boundaries
+    addBox(92, 12, 2, 0, 5, -45, wallMat);
+    addBox(92, 12, 2, 0, 5, 45, wallMat);
+    addBox(2, 12, 92, -45, 5, 0, wallMat);
+    addBox(2, 12, 92, 45, 5, 0, wallMat);
 
-    // Arena Obstacles
-    addBox(12, 6, 6, 0, 3, 0, 1);
-    addBox(8, 5, 14, -18, 2.5, -12, 2);
-    addBox(8, 5, 14, 18, 2.5, 12, 3);
+    // Arena Covers
+    addBox(12, 6, 6, 0, 3, 0, crateMat);
+    addBox(8, 5, 14, -18, 2.5, -12, crateMat);
+    addBox(8, 5, 14, 18, 2.5, 12, crateMat);
   }
 
   buildGunMesh() {
@@ -162,7 +167,6 @@ class GameEngine {
   }
 
   initUI() {
-    // Menu Tabs
     document.querySelectorAll('.tab-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
         document.querySelectorAll('.tab-btn, .tab-content').forEach(el => el.classList.remove('active'));
@@ -171,19 +175,16 @@ class GameEngine {
       });
     });
 
-    // Weapon Loadout
     document.querySelectorAll('.wpn-card').forEach(card => {
       card.addEventListener('click', (e) => {
         document.querySelectorAll('.wpn-card').forEach(c => c.classList.remove('active'));
-        const target = e.currentTarget;
-        target.classList.add('active');
-        this.selectedPrimary = target.dataset.wpn;
+        card.classList.add('active');
+        this.selectedPrimary = card.dataset.wpn;
         this.activeWeaponKey = this.selectedPrimary;
         this.buildGunMesh();
       });
     });
 
-    // Host Online
     document.getElementById('btn-host').addEventListener('click', () => {
       this.network.initHost(this.friends.myCode, (code) => {
         document.getElementById('room-code-display').innerText = code;
@@ -191,10 +192,8 @@ class GameEngine {
       });
     });
 
-    // Join Online
     document.getElementById('btn-join').addEventListener('click', () => {
-      const code = document.getElementById('join-code-input').value.trim();
-      this.joinFriendMatch(code);
+      this.joinFriendMatch(document.getElementById('join-code-input').value.trim());
     });
 
     document.getElementById('btn-start-online').addEventListener('click', () => {
@@ -202,19 +201,17 @@ class GameEngine {
       this.startMatch('ONLINE');
     });
 
-    // Start NPC Mode
     document.getElementById('btn-start-npc').addEventListener('click', () => {
       const diff = document.getElementById('ai-difficulty').value;
-      this.bot = new AIBot(this.scene, diff);
+      this.bot = new AdvancedBotAI(this.scene, this.collider, diff);
       this.startMatch('NPC');
     });
 
-    // Start Shooting Range Mode
     document.getElementById('btn-start-range').addEventListener('click', () => {
       this.targets = [
-        new RangeTarget(this.scene, new THREE.Vector3(-10, 3, -15)),
-        new RangeTarget(this.scene, new THREE.Vector3(0, 4, -20)),
-        new RangeTarget(this.scene, new THREE.Vector3(12, 3, -12))
+        new TargetDummy(this.scene, new THREE.Vector3(-10, 3, -15)),
+        new TargetDummy(this.scene, new THREE.Vector3(0, 4, -20)),
+        new TargetDummy(this.scene, new THREE.Vector3(12, 3, -12))
       ];
       this.startMatch('RANGE');
     });
@@ -230,16 +227,16 @@ class GameEngine {
   }
 
   joinFriendMatch(code) {
-    if (!code) return alert('Enter a room code!');
+    if (!code) return alert('Enter room code!');
     this.network.joinLobby(code, () => {
       document.getElementById('lobby-panel').classList.remove('hidden');
       document.getElementById('lobby-status').innerText = 'Connected! Waiting for host...';
-    }, () => alert('Failed to connect to lobby!'));
+    }, () => alert('Room not found!'));
   }
 
   initInputs() {
     document.getElementById('game-canvas').addEventListener('click', () => {
-      if (this.isGameActive) document.body.requestPointerLock();
+      if (this.isGameActive && !this.mobile.isMobile) document.body.requestPointerLock();
     });
 
     document.addEventListener('mousemove', (e) => {
@@ -255,11 +252,11 @@ class GameEngine {
       if (e.code === 'KeyS') this.moveB = true;
       if (e.code === 'KeyA') this.moveL = true;
       if (e.code === 'KeyD') this.moveR = true;
-      if (e.code === 'Space' && this.canJump) { this.velocity.y = 12; this.canJump = false; }
-      if (e.code === 'ShiftLeft') this.isSprint = true;
-      if (e.code === 'Digit1') this.switchGun(this.selectedPrimary);
-      if (e.code === 'Digit2') this.switchGun('pistol');
-      if (e.code === 'Digit3') this.switchGun('knife');
+      if (e.code === 'Space') this.jump();
+      if (e.code === 'ShiftLeft') this.dash();
+      if (e.code === 'Digit1') this.switchSlot(1);
+      if (e.code === 'Digit2') this.switchSlot(2);
+      if (e.code === 'Digit3') this.switchSlot(3);
     });
 
     document.addEventListener('keyup', (e) => {
@@ -267,7 +264,6 @@ class GameEngine {
       if (e.code === 'KeyS') this.moveB = false;
       if (e.code === 'KeyA') this.moveL = false;
       if (e.code === 'KeyD') this.moveR = false;
-      if (e.code === 'ShiftLeft') this.isSprint = false;
     });
 
     document.addEventListener('mousedown', (e) => {
@@ -275,8 +271,23 @@ class GameEngine {
     });
   }
 
-  switchGun(key) {
-    this.activeWeaponKey = key;
+  jump() {
+    if (this.canJump) { this.velocity.y = 12; this.canJump = false; }
+  }
+
+  dash() {
+    const dashVec = new THREE.Vector3(0, 0, -1).applyEuler(new THREE.Euler(0, this.yaw, 0));
+    this.velocity.addScaledVector(dashVec, 25);
+  }
+
+  switchSlot(slot) {
+    if (slot === 1) this.activeWeaponKey = this.selectedPrimary;
+    if (slot === 2) this.activeWeaponKey = 'pistol';
+    if (slot === 3) this.activeWeaponKey = 'knife';
+
+    document.querySelectorAll('.slot').forEach(s => s.classList.remove('active'));
+    document.querySelector(`.slot[data-slot="${slot}"]`).classList.add('active');
+
     this.buildGunMesh();
     this.updateHUD();
   }
@@ -292,11 +303,8 @@ class GameEngine {
     document.getElementById('hud').classList.remove('hidden');
     document.getElementById('mode-badge').innerText = `MODE: ${mode}`;
 
-    if (mode === 'RANGE') {
-      document.getElementById('range-stats').classList.remove('hidden');
-    }
-
-    document.body.requestPointerLock();
+    if (mode === 'RANGE') document.getElementById('range-stats').classList.remove('hidden');
+    if (!this.mobile.isMobile) document.body.requestPointerLock();
     this.updateHUD();
   }
 
@@ -319,8 +327,10 @@ class GameEngine {
       if (hits.length > 0) {
         const isHead = hits[0].object.userData.isHead;
         const dmg = isHead ? wpn.damage * 2 : wpn.damage;
+
         this.sfx.playHit(isHead);
         this.showHitmarker();
+        this.spawnDamageNumber(dmg, isHead);
 
         this.bot.health -= dmg;
         if (this.bot.health <= 0) {
@@ -338,11 +348,23 @@ class GameEngine {
         this.rangeScore += 100;
         this.sfx.playHit(true);
         this.showHitmarker();
+        this.spawnDamageNumber(100, true);
         const targetObj = this.targets.find(t => t.mesh === hits[0].object);
         if (targetObj) targetObj.hit();
       }
       this.updateRangeHUD();
     }
+  }
+
+  spawnDamageNumber(amount, isHead) {
+    const container = document.getElementById('damage-container');
+    const el = document.createElement('div');
+    el.className = `dmg-num ${isHead ? 'headshot' : ''}`;
+    el.innerText = amount;
+    el.style.left = `${window.innerWidth / 2 + (Math.random() - 0.5) * 60}px`;
+    el.style.top = `${window.innerHeight / 2 + (Math.random() - 0.5) * 60}px`;
+    container.appendChild(el);
+    setTimeout(() => el.remove(), 700);
   }
 
   showHitmarker() {
@@ -402,31 +424,48 @@ class GameEngine {
     const acc = this.rangeShots > 0 ? Math.round((this.rangeHits / this.rangeShots) * 100) : 100;
     document.getElementById('range-score').innerText = this.rangeScore;
     document.getElementById('range-acc').innerText = `${acc}%`;
-    document.getElementById('range-targets').innerText = `${this.rangeHits} / 20`;
+    document.getElementById('range-targets').innerText = this.rangeHits;
   }
 
   updatePhysics(delta) {
     if (!this.isGameActive) return;
 
-    const speed = this.isSprint ? 18 : 11;
+    if (this.mobile.isMobile) {
+      const look = this.mobile.consumeLookDelta();
+      this.yaw -= look.x * 2.0;
+      this.pitch -= look.y * 2.0;
+      this.pitch = Math.max(-Math.PI / 2 + 0.1, Math.min(Math.PI / 2 - 0.1, this.pitch));
+    }
+
+    const speed = 12;
     this.velocity.x -= this.velocity.x * 10.0 * delta;
     this.velocity.z -= this.velocity.z * 10.0 * delta;
     this.velocity.y -= 32.0 * delta;
 
     const dir = new THREE.Vector3();
-    if (this.moveF) dir.z -= 1;
-    if (this.moveB) dir.z += 1;
-    if (this.moveL) dir.x -= 1;
-    if (this.moveR) dir.x += 1;
-    dir.normalize();
-    dir.applyEuler(new THREE.Euler(0, this.yaw, 0, 'YXZ'));
+    if (this.mobile.isMobile) {
+      dir.x = this.mobile.moveVector.x;
+      dir.z = this.mobile.moveVector.y;
+    } else {
+      if (this.moveF) dir.z -= 1;
+      if (this.moveB) dir.z += 1;
+      if (this.moveL) dir.x -= 1;
+      if (this.moveR) dir.x += 1;
+    }
 
-    if (this.moveF || this.moveB) this.velocity.z += dir.z * speed * 8.0 * delta;
-    if (this.moveL || this.moveR) this.velocity.x += dir.x * speed * 8.0 * delta;
+    if (dir.lengthSq() > 0) {
+      dir.normalize();
+      dir.applyEuler(new THREE.Euler(0, this.yaw, 0, 'YXZ'));
+      this.velocity.z += dir.z * speed * 8.0 * delta;
+      this.velocity.x += dir.x * speed * 8.0 * delta;
+    }
 
     this.position.x += this.velocity.x * delta;
     this.position.z += this.velocity.z * delta;
     this.position.y += this.velocity.y * delta;
+
+    // Rigid Wall Collision Check (Player cannot pass through walls!)
+    this.collider.resolveCollision(this.position, 1.2);
 
     if (this.position.y < 2.5) {
       this.velocity.y = 0;
@@ -444,9 +483,7 @@ class GameEngine {
     }
   }
 
-  render() {
-    this.renderer.render(this.scene, this.camera);
-  }
+  render() { this.renderer.render(this.scene, this.camera); }
 }
 
 let game;
